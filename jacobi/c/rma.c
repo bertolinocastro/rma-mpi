@@ -47,7 +47,21 @@ int main(int agrc, char **argv){
 
     MPI_Win ghostWin, normWin;
     MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
-    MPI_Win_create( &u_k[ny*(lnx-1)], ny*sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWin ); // Criando janela para as ghostcells
+
+    if( rank ){
+        MPI_Win_create( &u_k[ny*(lnx-1)], ny*sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWin ); // Criando janela para as ghostcells
+    }
+
+    int leftRank, rightRank;
+    int *leftBound, *rightBound;
+    // Left Rank and Border
+    leftRank = rank ? rank - 1 : MPI_PROC_NULL;
+    leftBound = rank ? &u_k[ny] : NULL;
+
+    // Right Rank and Border
+    rightRank = rank < size - 1 ? rank + 1 : MPI_PROC_NULL;
+    rightBound = rank < size - 1 ? &u_k[ny*lnx] : NULL;
+
 
     initialise( u_k, u_kp1, lnx, rank, size );
 
