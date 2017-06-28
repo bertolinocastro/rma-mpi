@@ -27,10 +27,10 @@ int main(int agrc, char **argv){
     MPI_Comm_size( MPI_COMM_WORLD, &size );
 
     if( argc != 3 ){
-	if(!rank) fprintf(stderr, "You must provide the size in X and in Y as arguments to this code.\n");
-	return -1;
+	   if(!rank) fprintf(stderr, "You must provide the size in X and in Y as arguments to this code.\n");
+	   return -1;
     }
-    
+
     nx = atoi( argv[1] );
     ny = atoi( argv[2] );
 
@@ -38,12 +38,16 @@ int main(int agrc, char **argv){
 
     int lnx = nx/size; // Computing local nx
     if( lnx*size < nx )
-	if( rank < nx - lnx  * size ) lnx++;
- 
-    double * u_k = malloc( (lx +2)*ny * sizeof(*u_k) );    
-    double * u_kp1 = malloc( (lx +2)*ny * sizeof(*u_kp1) );    
-    double * tmp = malloc( (lx +2)*ny * sizeof(*tmp) );    
+	   if( rank < nx - lnx  * size ) lnx++;
+
+    double * u_k = malloc( (lx + 2)*ny * sizeof(*u_k) );
+    double * u_kp1 = malloc( (lx + 2)*ny * sizeof(*u_kp1) );
+    double * tmp = malloc( (lx + 2)*ny * sizeof(*tmp) );
     double start_time, end_time;
+
+    MPI_Win ghostWin, normWin;
+    MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
+    MPI_Win_create( &u_k[ny*(lnx-1)], ny*sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWin ); // Criando janela para as ghostcells
 
     initialise( u_k, u_kp1, lnx, rank, size );
 
@@ -51,28 +55,41 @@ int main(int agrc, char **argv){
     MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
-    
+
     for( i = 1; i <= lnx; ++i )
 	for( j = 0; j < ny; ++j )
-	    tmpnorm +=  pow( 
+	    tmpnorm +=  pow(
 			    u_k[j   + i	    *ny]*4  -
 			    u_k[j-1 + i	    *ny]    -
 			    u_k[j+1 + i	    *ny]    -
 			    u_k[j   + (i-1) *ny]    -
 			    u_k[j   + (i+1) *ny],
 			    2
-			);
+            );
 
     MPI_Allreduce( &tmpnorm, &bnorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
-   
+
     bnorm = sqrt( bnorm );
 
 
     star_time = MPI_Wtime();
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
-    
-	if( rank )
+
+    if( rank ){
+        MPI_Win_fence( 0, ghostWin );
+            MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
+                     rank-1, 0, ny, MPI_DOUBLE,
+                     ghostWin );
+        MPI_Win_fence( 0, ghostWin );
+    }
+
+
+
+
+
+
+    if( rank )
 	    MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
 	    MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
 	if( rank < size - 1 )
@@ -84,7 +101,7 @@ int main(int agrc, char **argv){
 	tmpnorm = 0.0f;
 	for( i = 1; i <= lnx; ++i )
 	    for( j = 0; j < ny; ++j )
-		tmpnorm +=  pow( 
+		tmpnorm +=  pow(
 				u_k[j   + i	    *ny]*4  -
 				u_k[j-1 + i	    *ny]    -
 				u_k[j+1 + i	    *ny]    -
@@ -140,4 +157,3 @@ void initialise( double *u_k, double *u_kp1, int lnx, int rank, int size ){
 	    u_kp1[j+i*ny] = u_k[j+i*ny] = 0;
     }
 }
-
