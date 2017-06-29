@@ -45,28 +45,32 @@ int main(int agrc, char **argv){
     double * tmp = malloc( (lx + 2)*ny * sizeof(*tmp) );
     double start_time, end_time;
 
-    MPI_Win ghostWin, normWin;
-    MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
-
-    if( rank ){
-        MPI_Win_create( &u_k[ny*(lnx-1)], ny*sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWin ); // Criando janela para as ghostcells
-    }
-
+    MPI_Win ghostWinL, ghostWinR, normWin;
     int leftRank, rightRank;
-    int *leftBound, *rightBound;
-    // Left Rank and Border
+    int *leftBound, *rightBound; long leftSize, rightSize;
+
+    // Left Rank and Border's address and size
     leftRank = rank ? rank - 1 : MPI_PROC_NULL;
     leftBound = rank ? &u_k[ny] : NULL;
+    leftSize = rank ? ny*sizeof(double) : 0;
 
-    // Right Rank and Border
+    // Right Rank and Border's address and size
     rightRank = rank < size - 1 ? rank + 1 : MPI_PROC_NULL;
     rightBound = rank < size - 1 ? &u_k[ny*lnx] : NULL;
+    rightSize = rank < size - 1 ? ny*sizeof(double) : 0;
 
+    // Criando janela para as truecells à esquerda
+    MPI_Win_create( leftBound, leftSize, sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWinL );
+    // Criando janela para as true cells à direita
+    MPI_Win_create( rightBound, rightSize, sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWinR );
+
+
+    MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
 
     initialise( u_k, u_kp1, lnx, rank, size );
 
     double rnom = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
-    MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
+    // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
 
@@ -90,60 +94,72 @@ int main(int agrc, char **argv){
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
 
-    if( rank ){
-        MPI_Win_fence( 0, ghostWin );
-            MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
-                     rank-1, 0, ny, MPI_DOUBLE,
-                     ghostWin );
-        MPI_Win_fence( 0, ghostWin );
-    }
+        // Populando as próprias ghostcells à esquerda com as truecells à direita dos leftRank
+        MPI_Win_fence( 0, ghostWinR );
+            // MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
+                    //  rank-1, 0, ny, MPI_DOUBLE,
+                    //  ghostWin );
+            MPI_Get(
+                &u_k[0], ny, MPI_DOUBLE,
+                leftRank, 0, ny, MPI_DOUBLE,
+                ghostWinR
+            );
+        MPI_Win_fence( 0, ghostWinR );
+
+        // Populando as próprias ghostcells à direita com as truecells à esquerda dos rightRank
+        MPI_Win_fence( 0, ghostWinL );
+            MPI_Get(
+                &u_k[ny*(lnx+1)], ny, MPI_DOUBLE,
+                rightRank, 0, ny, MPI_DOUBLE,
+                ghostWinL
+            );
+        MPI_Win_fence( 0, ghostWinL );
 
 
 
 
 
+        // if( rank )
+    	//     MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
+    	//     MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
+    	// if( rank < size - 1 )
+    	//     MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
+    	//     MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
+        //
+    	// MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
 
-    if( rank )
-	    MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
-	    MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
-	if( rank < size - 1 )
-	    MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
-	    MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
+    	tmpnorm = 0.0f;
+    	for( i = 1; i <= lnx; ++i )
+    	    for( j = 0; j < ny; ++j )
+    		tmpnorm +=  pow(
+    				u_k[j   + i	    *ny]*4  -
+    				u_k[j-1 + i	    *ny]    -
+    				u_k[j+1 + i	    *ny]    -
+    				u_k[j   + (i-1) *ny]	    -
+    				u_k[j   + (i+1) *ny],
+    				2
+    			    );
 
-	MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
+    	MPI_Allreduce( &tmpnorm, &rnorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
 
-	tmpnorm = 0.0f;
-	for( i = 1; i <= lnx; ++i )
-	    for( j = 0; j < ny; ++j )
-		tmpnorm +=  pow(
-				u_k[j   + i	    *ny]*4  -
-				u_k[j-1 + i	    *ny]    -
-				u_k[j+1 + i	    *ny]    -
-				u_k[j   + (i-1) *ny]	    -
-				u_k[j   + (i+1) *ny],
-				2
-			    );
+    	norm = sqrt( rnorm )/bnorm;
 
-	MPI_Allreduce( &tmpnorm, &rnorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
+    	if( norm < CONVERGENCE_ACCURACY ) break;
 
-	norm = sqrt( rnorm )/bnorm;
+    	for( i = 1; i <= lnx; ++i )
+    	    for( j = 0; j < ny; ++j )
+    		u_kp1[j + i*ny] =   0.25f * (
+    				    u_k[(j-1)	+ i*ny]	    +
+    				    u_k[(j+1)	+ i*ny]	    +
+    				    u_k[j	+ (i-1)*ny] +
+    				    u_k[j	+ (i+1)*ny] +
+    				    );
 
-	if( norm < CONVERGENCE_ACCURACY ) break;
+    	memcpy( tmp, u_kp1, ny * (lnx + 2) * sizeof(double) );
+    	memcpy( u_kp1, u_k, ny * (lnx + 2) * sizeof(double) );
+    	memcpy( u_k,   tmp, ny * (lnx + 2) * sizeof(double) );
 
-	for( i = 1; i <= lnx; ++i )
-	    for( j = 0; j < ny; ++j )
-		u_kp1[j + i*ny] =   0.25f * (
-				    u_k[(j-1)	+ i*ny]	    +
-				    u_k[(j+1)	+ i*ny]	    +
-				    u_k[j	+ (i-1)*ny] +
-				    u_k[j	+ (i+1)*ny] +
-				    );
-
-	memcpy( tmp, u_kp1, ny * (lnx + 2) * sizeof(double) );
-	memcpy( u_kp1, u_k, ny * (lnx + 2) * sizeof(double) );
-	memcpy( u_k,   tmp, ny * (lnx + 2) * sizeof(double) );
-
-	if( !(k%REPORT_NORM_PERIOD) && !rank ) printf( "Iteration=%d Relative Norm=%e\n", k, norm);
+    	if( !(k%REPORT_NORM_PERIOD) && !rank ) printf( "Iteration=%d Relative Norm=%e\n", k, norm);
 
     }
     end_time = MPI_Wtime();
