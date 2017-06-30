@@ -19,7 +19,7 @@ int nx, ny;
 
 void initialise( double*, double*, int, int, int );
 
-int main(int agrc, char **argv){
+int main(int argc, char **argv){
 
     int rank, size;
     MPI_Init( &argc, &argv );
@@ -40,14 +40,14 @@ int main(int agrc, char **argv){
     if( lnx*size < nx )
 	   if( rank < nx - lnx  * size ) lnx++;
 
-    double * u_k = malloc( (lx + 2)*ny * sizeof(*u_k) );
-    double * u_kp1 = malloc( (lx + 2)*ny * sizeof(*u_kp1) );
-    double * tmp = malloc( (lx + 2)*ny * sizeof(*tmp) );
+    double * u_k = malloc( (lnx + 2)*ny * sizeof(*u_k) );
+    double * u_kp1 = malloc( (lnx + 2)*ny * sizeof(*u_kp1) );
+    double * tmp = malloc( (lnx + 2)*ny * sizeof(*tmp) );
     double start_time, end_time;
 
     MPI_Win ghostWinL, ghostWinR, normWin;
     int leftRank, rightRank;
-    int *leftBound, *rightBound; long leftSize, rightSize;
+    double *leftBound, *rightBound; long leftSize, rightSize;
 
     // Left Rank and Border's address and size
     leftRank = rank ? rank - 1 : MPI_PROC_NULL;
@@ -68,8 +68,9 @@ int main(int agrc, char **argv){
     MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
 
     initialise( u_k, u_kp1, lnx, rank, size );
+    return 0;
 
-    double rnom = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
+    double rnorm = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
     // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
@@ -90,7 +91,7 @@ int main(int agrc, char **argv){
     bnorm = sqrt( bnorm );
 
 
-    star_time = MPI_Wtime();
+    start_time = MPI_Wtime();
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
 
@@ -152,7 +153,7 @@ int main(int agrc, char **argv){
     				    u_k[(j-1)	+ i*ny]	    +
     				    u_k[(j+1)	+ i*ny]	    +
     				    u_k[j	+ (i-1)*ny] +
-    				    u_k[j	+ (i+1)*ny] +
+    				    u_k[j	+ (i+1)*ny]
     				    );
 
     	memcpy( tmp, u_kp1, ny * (lnx + 2) * sizeof(double) );
@@ -179,11 +180,11 @@ void initialise( double *u_k, double *u_kp1, int lnx, int rank, int size ){
     int i, j, llnx = lnx + 1;
 
     for( j = 0; j < ny; ++j ){
-	u_kp1[j] = u_k[j] = !rank ? TOP_VALUES : 0;
-    //for( j = 0; j < ny; ++j )
-	u_kp1[j+ny*llnx] = u_k[j+ny*llnx] = rank == size ? BOTTOM_VALUES : 0;
+	    u_kp1[j] = u_k[j] = !rank ? TOP_VALUES : 0;
+        //for( j = 0; j < ny; ++j )
+        u_kp1[j+ny*llnx] = u_k[j+ny*llnx] = rank == size-1 ? BOTTOM_VALUES : 0;
 
-        for( i = 1; j <= lnx; ++i )
-	    u_kp1[j+i*ny] = u_k[j+i*ny] = 0;
+        for( i = 1; i <= lnx; ++i )
+	       u_kp1[j+i*ny] = u_k[j+i*ny] = 0;
     }
 }
