@@ -35,7 +35,7 @@ int main(int argc, char **argv){
     ny = atoi( argv[2] );
 
     if(!rank) printf( "Solving to accuracy of %.0e, global system size is x=%d y=%d\n", CONVERGENCE_ACCURACY, nx, ny );
-
+// printf("Rank %d size %d\n",rank, size );
     int lnx = nx/size; // Computing local nx
     if( lnx*size < nx )
 	   if( rank < nx - lnx  * size ) lnx++;
@@ -51,12 +51,14 @@ int main(int argc, char **argv){
 
     // Left Rank and Border's address and size
     leftRank = rank ? rank - 1 : MPI_PROC_NULL;
-    leftBound = rank ? &u_k[ny] : NULL;
+    // leftBound = rank ? &u_k[ny] : NULL; // Exposing truecells
+    leftBound = rank ? &u_k[0] : NULL; // Exposing ghostcells
     leftSize = rank ? ny*sizeof(double) : 0;
 
     // Right Rank and Border's address and size
     rightRank = rank < size - 1 ? rank + 1 : MPI_PROC_NULL;
-    rightBound = rank < size - 1 ? &u_k[ny*lnx] : NULL;
+    // rightBound = rank < size - 1 ? &u_k[ny*lnx] : NULL; // Exposing truecells
+    rightBound = rank < size - 1 ? &u_k[ny*(lnx+1)] : NULL; // Exposing ghostcells
     rightSize = rank < size - 1 ? ny*sizeof(double) : 0;
 
     // Criando janela para as truecells à esquerda
@@ -65,10 +67,10 @@ int main(int argc, char **argv){
     MPI_Win_create( rightBound, rightSize, sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &ghostWinR );
 
 
-    MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
+    // MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
 
     initialise( u_k, u_kp1, lnx, rank, size );
-    return 0;
+    // return 0;
 
     double rnorm = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
     // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
@@ -76,8 +78,8 @@ int main(int argc, char **argv){
     int i,j,k;
 
     for( i = 1; i <= lnx; ++i )
-	for( j = 0; j < ny; ++j )
-	    tmpnorm +=  pow(
+        for( j = 0; j < ny; ++j )
+            tmpnorm +=  pow(
 			    u_k[j   + i	    *ny]*4  -
 			    u_k[j-1 + i	    *ny]    -
 			    u_k[j+1 + i	    *ny]    -
@@ -97,25 +99,31 @@ int main(int argc, char **argv){
 
         // Populando as próprias ghostcells à esquerda com as truecells à direita dos leftRank
         MPI_Win_fence( 0, ghostWinR );
-            // MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
-                    //  rank-1, 0, ny, MPI_DOUBLE,
-                    //  ghostWin );
-            MPI_Get(
-                &u_k[0], ny, MPI_DOUBLE,
-                leftRank, 0, ny, MPI_DOUBLE,
-                ghostWinR
-            );
+            MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
+                     leftRank, 0, ny, MPI_DOUBLE,
+                     ghostWinR );
+            // MPI_Get(
+            //     &u_k[0], ny, MPI_DOUBLE,
+            //     leftRank, 0, ny, MPI_DOUBLE,
+            //     ghostWinR
+            // );
         MPI_Win_fence( 0, ghostWinR );
+
+        // printf("Comuniquei! %d winR\n", rank);
 
         // Populando as próprias ghostcells à direita com as truecells à esquerda dos rightRank
         MPI_Win_fence( 0, ghostWinL );
-            MPI_Get(
-                &u_k[ny*(lnx+1)], ny, MPI_DOUBLE,
-                rightRank, 0, ny, MPI_DOUBLE,
-                ghostWinL
-            );
+            MPI_Put( &u_k[ny*lnx], ny, MPI_DOUBLE,
+                 rightRank, 0, ny, MPI_DOUBLE,
+                 ghostWinL );
+            // MPI_Get(
+            //     &u_k[ny*(lnx+1)], ny, MPI_DOUBLE,
+            //     rightRank, 0, ny, MPI_DOUBLE,
+            //     ghostWinL
+            // );
         MPI_Win_fence( 0, ghostWinL );
 
+        // printf("Comuniquei! %d winL\n", rank);
 
 
 
