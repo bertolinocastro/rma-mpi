@@ -1,0 +1,41 @@
+x       y       tempo   Abordagem
+
+100     10      0.94    Abertura de ambas as janelas ao mesmo tempo com acesso GET
+1000    10      49.0    Abordagem anterior
+100     100     48.8    Abordagem anterior 
+
+
+--------xxxxxxxxxxxx
+100     10      0.92    Mesma abordagem anterior, com o fechamento da janela ao fim do loop
+100     100       x     Abordagem anterior
+1000    10        x     Abordagem anterior 
+-------xxxxxxxxxxxxx        *Calls não-RMA do MPI não podem ocorrer antes do fechamento da janela
+
+
+
+
+100     10      0.92    Abertura das janelas com fechamento em seguida, ainda utilizando GET
+1000    10      49.4    Abordagem anterior
+100     100     4.77    Abordagem anterior
+
+
+
+100     10      0.88    Abertura de cada janela com seu fechamento em seguida utilizando o PUT
+1000    10      48.8    Abordagem anterior
+100     100     4.77    Abordagem anterior
+1000    100     961.0   Abordagem anterior
+
+
+-------------------------
+
+100     10      0.56    Usando send-recv original
+100     100     4.33    Abordagem anterior
+1000    10      46.5    Abordagem anterior
+1000    100     854.6   Abordagem anterior
+
+
+
+
+
+
+

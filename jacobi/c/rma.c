@@ -73,7 +73,7 @@ int main(int argc, char **argv){
     // return 0;
 
     double rnorm = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
-    // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
+    MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
 
@@ -97,45 +97,45 @@ int main(int argc, char **argv){
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
 
-        // Populando as próprias ghostcells à esquerda com as truecells à direita dos leftRank
-        MPI_Win_fence( 0, ghostWinR );
-            MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
-                     leftRank, 0, ny, MPI_DOUBLE,
-                     ghostWinR );
-            // MPI_Get(
-            //     &u_k[0], ny, MPI_DOUBLE,
-            //     leftRank, 0, ny, MPI_DOUBLE,
-            //     ghostWinR
-            // );
-        MPI_Win_fence( 0, ghostWinR );
-
-        // printf("Comuniquei! %d winR\n", rank);
-
-        // Populando as próprias ghostcells à direita com as truecells à esquerda dos rightRank
-        MPI_Win_fence( 0, ghostWinL );
-            MPI_Put( &u_k[ny*lnx], ny, MPI_DOUBLE,
-                 rightRank, 0, ny, MPI_DOUBLE,
-                 ghostWinL );
-            // MPI_Get(
-            //     &u_k[ny*(lnx+1)], ny, MPI_DOUBLE,
-            //     rightRank, 0, ny, MPI_DOUBLE,
-            //     ghostWinL
-            // );
-        MPI_Win_fence( 0, ghostWinL );
+        // // Populando as próprias ghostcells à esquerda com as truecells à direita dos leftRank
+        // MPI_Win_fence( 0, ghostWinR );
+        //     MPI_Put( &u_k[ny], ny, MPI_DOUBLE,
+        //              leftRank, 0, ny, MPI_DOUBLE,
+        //              ghostWinR );
+        //     // MPI_Get(
+        //     //     &u_k[0], ny, MPI_DOUBLE,
+        //     //     leftRank, 0, ny, MPI_DOUBLE,
+        //     //     ghostWinR
+        //     // );
+        // MPI_Win_fence( 0, ghostWinR );
+        //
+        // // printf("Comuniquei! %d winR\n", rank);
+        //
+        // // Populando as próprias ghostcells à direita com as truecells à esquerda dos rightRank
+        // MPI_Win_fence( 0, ghostWinL );
+        //     MPI_Put( &u_k[ny*lnx], ny, MPI_DOUBLE,
+        //          rightRank, 0, ny, MPI_DOUBLE,
+        //          ghostWinL );
+        //     // MPI_Get(
+        //     //     &u_k[ny*(lnx+1)], ny, MPI_DOUBLE,
+        //     //     rightRank, 0, ny, MPI_DOUBLE,
+        //     //     ghostWinL
+        //     // );
+        // MPI_Win_fence( 0, ghostWinL );
 
         // printf("Comuniquei! %d winL\n", rank);
 
 
 
 
-        // if( rank )
-    	//     MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
-    	//     MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
-    	// if( rank < size - 1 )
-    	//     MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
-    	//     MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
-        //
-    	// MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
+        if( rank )
+    	    MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
+    	    MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
+    	if( rank < size - 1 )
+    	    MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
+    	    MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
+
+    	MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
 
     	tmpnorm = 0.0f;
     	for( i = 1; i <= lnx; ++i )
