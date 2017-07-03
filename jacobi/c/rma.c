@@ -119,11 +119,9 @@ int main(int argc, char **argv){
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
 
-        if( rank < size - 1 )
-            MPI_Win_post( subGroupR, 0, ghostWinR );
-
-        // printf("Abri post\n" );
         if( rank ){
+            MPI_Win_post( subGroupL, 0, ghostWinL );
+
             MPI_Win_start( subGroupR, 0, ghostWinR );
             // printf("startei\n" );
 
@@ -133,15 +131,13 @@ int main(int argc, char **argv){
                 ghostWinR
             );
             MPI_Win_complete( ghostWinR );
+
         }
-        if( rank < size - 1 )
-            MPI_Win_wait( ghostWinR );
-        // printf("fechei post\n" );
-
-        if( rank )
-            MPI_Win_post( subGroupL, 0, ghostWinL );
-
         if( rank < size - 1 ){
+
+
+            MPI_Win_post( subGroupR, 0, ghostWinR );
+
             MPI_Win_start( subGroupL, 0, ghostWinL );
             // printf("startei\n" );
 
@@ -151,13 +147,50 @@ int main(int argc, char **argv){
                 ghostWinL
             );
             MPI_Win_complete( ghostWinL );
-        }
 
+        }
         if( rank )
             MPI_Win_wait( ghostWinL );
 
+        if( rank < size - 1 )
+            MPI_Win_wait( ghostWinR );
 
-
+        //
+        // if( rank < size - 1 )
+        //     MPI_Win_post( subGroupR, 0, ghostWinR );
+        //
+        // if( rank ){
+        //     MPI_Win_start( subGroupR, 0, ghostWinR );
+        //
+        //     MPI_Put(
+        //         &u_k[ny], ny, MPI_DOUBLE,
+        //         leftRank, 0, ny, MPI_DOUBLE,
+        //         ghostWinR
+        //     );
+        //     MPI_Win_complete( ghostWinR );
+        // }
+        // if( rank < size - 1 )
+        //     MPI_Win_wait( ghostWinR );
+        //
+        // if( rank )
+        //     MPI_Win_post( subGroupL, 0, ghostWinL );
+        //
+        // if( rank < size - 1 ){
+        //     MPI_Win_start( subGroupL, 0, ghostWinL );
+        //
+        //     MPI_Put(
+        //         &u_k[ny*lnx], ny, MPI_DOUBLE,
+        //         rightRank, 0, ny, MPI_DOUBLE,
+        //         ghostWinL
+        //     );
+        //     MPI_Win_complete( ghostWinL );
+        // }
+        //
+        // if( rank )
+        //     MPI_Win_wait( ghostWinL );
+        //
+        //
+        //
 
 
 

@@ -41,7 +41,14 @@ x       y       tempo   Abordagem
 
 Testes com POST/WAIT
 
+100     10      0.62    Usando POST/WAIT com wait no final
+100     100     4.40    Abordagem anterior 
+1000    10      46.3    Abordagem anterior 
 
+
+100     10      0.63    Usando POST/WAIT com calls em diferentes ifs
+100     100     4.43    Abordagem anterior
+1000    10      60.0    Abordagen anterior
 
 
 
