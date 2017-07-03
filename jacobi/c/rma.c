@@ -45,8 +45,8 @@ int main(int argc, char **argv){
     double * tmp = malloc( (lnx + 2)*ny * sizeof(*tmp) );
     double start_time, end_time;
 
-    MPI_Win ghostWinL, ghostWinR, normWin;
     int leftRank, rightRank;
+    MPI_Win ghostWinL, ghostWinR, normWin;
     double *leftBound, *rightBound; long leftSize, rightSize;
 
     // Left Rank and Border's address and size
@@ -69,11 +69,33 @@ int main(int argc, char **argv){
 
     // MPI_Win_create( &normWin, sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &normWin ); // Criando janela para a variavel de norma
 
+
+
+    MPI_Group worldGroup, subGroupL, subGroupR;
+    // int ranks[size];
+    // for ( int i = 0; i < size; ranks[i] = i++);
+    // memcpy( ranks,  );
+    int ranks[2] = { leftRank, rightRank };
+    int ranksLenght = 2;
+    if( !rank ){
+        ranks[0] = rightRank != MPI_PROC_NULL ? rightRank : 0;
+        ranksLenght = 1;
+    }
+    if( rank == size - 1 ){
+        if( leftRank == MPI_PROC_NULL ) ranks[0] = 0;
+        ranksLenght = 1;
+    }
+
+    MPI_Comm_group( MPI_COMM_WORLD, &worldGroup );
+    MPI_Group_incl( worldGroup, ranksLenght, ranks , &subGroupL );
+    MPI_Group_incl( worldGroup, ranksLenght, ranks, &subGroupR );
+
+
+// printf("Passei do grupo\n" );
     initialise( u_k, u_kp1, lnx, rank, size );
-    // return 0;
 
     double rnorm = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
-    MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
+    // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
 
@@ -96,6 +118,48 @@ int main(int argc, char **argv){
     start_time = MPI_Wtime();
 
     for( k = 0; k < MAX_ITERATIONS; ++k ){
+
+        if( rank < size - 1 )
+            MPI_Win_post( subGroupR, 0, ghostWinR );
+
+        // printf("Abri post\n" );
+        if( rank ){
+            MPI_Win_start( subGroupR, 0, ghostWinR );
+            // printf("startei\n" );
+
+            MPI_Put(
+                &u_k[ny], ny, MPI_DOUBLE,
+                leftRank, 0, ny, MPI_DOUBLE,
+                ghostWinR
+            );
+            MPI_Win_complete( ghostWinR );
+        }
+        if( rank < size - 1 )
+            MPI_Win_wait( ghostWinR );
+        // printf("fechei post\n" );
+
+        if( rank )
+            MPI_Win_post( subGroupL, 0, ghostWinL );
+
+        if( rank < size - 1 ){
+            MPI_Win_start( subGroupL, 0, ghostWinL );
+            // printf("startei\n" );
+
+            MPI_Put(
+                &u_k[ny*lnx], ny, MPI_DOUBLE,
+                rightRank, 0, ny, MPI_DOUBLE,
+                ghostWinL
+            );
+            MPI_Win_complete( ghostWinL );
+        }
+
+        if( rank )
+            MPI_Win_wait( ghostWinL );
+
+
+
+
+
 
         // // Populando as próprias ghostcells à esquerda com as truecells à direita dos leftRank
         // MPI_Win_fence( 0, ghostWinR );
@@ -128,14 +192,14 @@ int main(int argc, char **argv){
 
 
 
-        if( rank )
-    	    MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
-    	    MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
-    	if( rank < size - 1 )
-    	    MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
-    	    MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
-
-    	MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
+        // if( rank )
+    	//     MPI_Isend( &u_k[ny], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[0] ),
+    	//     MPI_Irecv( &u_k[0], ny, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &requests[1] );
+    	// if( rank < size - 1 )
+    	//     MPI_Isend( &u_k[lnx*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[2] ),
+    	//     MPI_Irecv( &u_k[(lnx+1)*ny], ny, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &requests[3] );
+        //
+    	// MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
 
     	tmpnorm = 0.0f;
     	for( i = 1; i <= lnx; ++i )
