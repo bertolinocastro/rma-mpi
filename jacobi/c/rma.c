@@ -89,7 +89,7 @@ int main(int argc, char **argv){
     initialise( u_k, u_kp1, lnx, rank, size );
 
     double rnorm = 0.0f, bnorm = 0.0f, norm, tmpnorm = 0.0f;
-    // MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
+    MPI_Request requests[] = {MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL,MPI_REQUEST_NULL};
 
     int i,j,k;
 
@@ -111,8 +111,37 @@ int main(int argc, char **argv){
 
     start_time = MPI_Wtime();
 
-
+// #pragma omp parallel num_threads(2)
+// {
+//         int k;
         for( k = 0; k < MAX_ITERATIONS; ++k ){
+
+
+            /* Using Passive Target Communcation */
+            if( rank ){
+                MPI_Win_lock( MPI_LOCK_EXCLUSIVE, leftRank, 0, ghostWinR );
+
+                MPI_Put(
+                    &u_k[ny], ny, MPI_DOUBLE,
+                    leftRank, 0, ny, MPI_DOUBLE,
+                    ghostWinR
+                );
+
+                MPI_Win_unlock( leftRank, ghostWinR );
+            }
+            if( rank < size - 1 ){
+                MPI_Win_lock( MPI_LOCK_EXCLUSIVE, rightRank, 0, ghostWinL );
+
+                MPI_Put(
+                    &u_k[lnx*ny], ny, MPI_DOUBLE,
+                    rightRank, 0, ny, MPI_DOUBLE,
+                    ghostWinL
+                );
+
+                MPI_Win_unlock( rightRank, ghostWinL );
+            }
+
+
 
 
 
@@ -161,7 +190,6 @@ int main(int argc, char **argv){
 
 
 
-            /* Nao vale a pena! */
             // #pragma omp sections
             // {
             //
@@ -193,6 +221,10 @@ int main(int argc, char **argv){
             //     }
             //
             // }
+
+
+
+
 
             // if( rank ) // A
             //     MPI_Win_post( subGroupL, 0, ghostWinL );
@@ -230,7 +262,7 @@ int main(int argc, char **argv){
 
 
 
-            //
+
             // if( rank < size - 1 )
             //     MPI_Win_post( subGroupR, 0, ghostWinR );
             //
@@ -263,9 +295,8 @@ int main(int argc, char **argv){
             //
             // if( rank )
             //     MPI_Win_wait( ghostWinL );
-            //
-            //
-            //
+
+
 
 
 
@@ -280,9 +311,6 @@ int main(int argc, char **argv){
             //     //     ghostWinR
             //     // );
             // MPI_Win_fence( 0, ghostWinR );
-            //
-            // // printf("Comuniquei! %d winR\n", rank);
-            //
             // // Populando as próprias ghostcells à direita com as truecells à esquerda dos rightRank
             // MPI_Win_fence( 0, ghostWinL );
             //     MPI_Put( &u_k[ny*lnx], ny, MPI_DOUBLE,
@@ -295,9 +323,6 @@ int main(int argc, char **argv){
             //     // );
             // MPI_Win_fence( 0, ghostWinL );
 
-            // printf("Comuniquei! %d winL\n", rank);
-
-
 
 
             // if( rank )
@@ -309,40 +334,43 @@ int main(int argc, char **argv){
             //
         	// MPI_Waitall( 4, requests, MPI_STATUSES_IGNORE );
 
+            // #pragma omp single
+            // {
+            	tmpnorm = 0.0f;
+            	for( i = 1; i <= lnx; ++i )
+            	    for( j = 0; j < ny; ++j )
+            		tmpnorm +=  pow(
+            				u_k[j   + i	    *ny]*4  -
+            				u_k[j-1 + i	    *ny]    -
+            				u_k[j+1 + i	    *ny]    -
+            				u_k[j   + (i-1) *ny]	    -
+            				u_k[j   + (i+1) *ny],
+            				2
+            			    );
 
-        	tmpnorm = 0.0f;
-        	for( i = 1; i <= lnx; ++i )
-        	    for( j = 0; j < ny; ++j )
-        		tmpnorm +=  pow(
-        				u_k[j   + i	    *ny]*4  -
-        				u_k[j-1 + i	    *ny]    -
-        				u_k[j+1 + i	    *ny]    -
-        				u_k[j   + (i-1) *ny]	    -
-        				u_k[j   + (i+1) *ny],
-        				2
-        			    );
+            	MPI_Allreduce( &tmpnorm, &rnorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
 
-        	MPI_Allreduce( &tmpnorm, &rnorm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
+            	norm = sqrt( rnorm )/bnorm;
 
-        	norm = sqrt( rnorm )/bnorm;
+            	if( norm < CONVERGENCE_ACCURACY ) break;
 
-        	if( norm < CONVERGENCE_ACCURACY ) break;
+            	for( i = 1; i <= lnx; ++i )
+            	    for( j = 0; j < ny; ++j )
+            		u_kp1[j + i*ny] =   0.25f * (
+                        				    u_k[(j-1)	+ i*ny] +
+                        				    u_k[(j+1)	+ i*ny]	+
+                        				    u_k[j	+ (i-1)*ny] +
+                        				    u_k[j	+ (i+1)*ny]
+    		                            );
 
-        	for( i = 1; i <= lnx; ++i )
-        	    for( j = 0; j < ny; ++j )
-        		u_kp1[j + i*ny] =   0.25f * (
-                    				    u_k[(j-1)	+ i*ny] +
-                    				    u_k[(j+1)	+ i*ny]	+
-                    				    u_k[j	+ (i-1)*ny] +
-                    				    u_k[j	+ (i+1)*ny]
-		                            );
+            	memcpy( tmp, u_kp1, ny * (lnx + 2) * sizeof(double) );
+            	memcpy( u_kp1, u_k, ny * (lnx + 2) * sizeof(double) );
+            	memcpy( u_k,   tmp, ny * (lnx + 2) * sizeof(double) );
 
-        	memcpy( tmp, u_kp1, ny * (lnx + 2) * sizeof(double) );
-        	memcpy( u_kp1, u_k, ny * (lnx + 2) * sizeof(double) );
-        	memcpy( u_k,   tmp, ny * (lnx + 2) * sizeof(double) );
-
-        	if( !(k%REPORT_NORM_PERIOD) && !rank ) printf( "Iteration=%d Relative Norm=%e\n", k, norm);
+            	if( !(k%REPORT_NORM_PERIOD) && !rank ) printf( "Iteration=%d Relative Norm=%e\n", k, norm);
+            // }
         }
+    // }
     end_time = MPI_Wtime();
 
     if( !rank ) printf( "\nTerminated on %d iterations, Relative Norm=%e, Total time=%e s\n", k, norm, end_time - start_time );
